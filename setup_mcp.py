@@ -94,7 +94,8 @@ def generate_mcp_config(python_path, server_script_path):
                 "command": python_path,
                 "args": [server_script_path],
                 "env": {
-                    "PYTHONPATH": base_path
+                    "PYTHONPATH": base_path,
+                    "GOOGLE_API_KEY": "XXX"
                 }
             }
         }

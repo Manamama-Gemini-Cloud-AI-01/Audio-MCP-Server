@@ -10,10 +10,11 @@ import numpy as np
 import tempfile
 import wave
 from mcp.server.fastmcp import FastMCP
+from dotenv import load_dotenv
 
-# Import Google GenAI for Gemini integration
+# Import Google Generative AI for Gemini integration
 try:
-    from google import genai
+    import google.generativeai as genai
     GENAI_AVAILABLE = True
 except ImportError:
     GENAI_AVAILABLE = False
@@ -21,6 +22,7 @@ except ImportError:
 # Initialize FastMCP server
 mcp = FastMCP("audio-interface")
 
+load_dotenv()
 # Constants
 DEFAULT_SAMPLE_RATE = 44100
 DEFAULT_CHANNELS = 1
@@ -225,7 +227,8 @@ def initialize_genai(api_key):
     
     try:
         genai.configure(api_key=api_key)
-        return genai.GenerativeModel('gemini-2.0-flash')
+        # Return the module as the client
+        return genai
     except Exception as e:
         print(f"Error initializing Gemini: {e}")
         return None
@@ -264,8 +267,7 @@ async def record_audio_to_file(duration, sample_rate=DEFAULT_SAMPLE_RATE, channe
         return None, None
 
 @mcp.tool()
-async def gemini_conversation(duration: float = DEFAULT_DURATION, 
-                             api_key: str = None,
+async def gemini_conversation(duration: float = DEFAULT_DURATION,
                              sample_rate: int = DEFAULT_SAMPLE_RATE,
                              channels: int = DEFAULT_CHANNELS,
                              device_index: int = None) -> str:
@@ -274,7 +276,6 @@ async def gemini_conversation(duration: float = DEFAULT_DURATION,
     
     Args:
         duration: Maximum recording duration in seconds (default: 5)
-        api_key: Google AI API key (if not provided, will check environment variable)
         sample_rate: Sample rate in Hz (default: 44100)
         channels: Number of audio channels (default: 1)
         device_index: Specific input device index to use (default: system default)
@@ -283,15 +284,17 @@ async def gemini_conversation(duration: float = DEFAULT_DURATION,
         A message indicating the conversation result
     """
     if not GENAI_AVAILABLE:
-        return "Google Generative AI package is not installed. Please install it with: pip install google-generativeai"
+        return ("Google Generative AI package is not installed. "
+                "Please install it with: pip install google-generativeai")
     
     try:
-        # Get API key from parameter or environment
-        actual_api_key = api_key or os.environ.get("GOOGLE_API_KEY")
+        # Get API key from environment
+        actual_api_key = os.environ.get("GOOGLE_API_KEY")
         if not actual_api_key:
-            return "No API key provided. Please provide a valid Google AI API key or set the GOOGLE_API_KEY environment variable."
+            return ("No API key provided. Please provide a valid Google AI API key "
+                    "or set the GOOGLE_API_KEY environment variable.")
         print(actual_api_key)
-        # Initialize Gemini
+        # Initialize Gemini (Google Generative AI)
         model = initialize_genai(actual_api_key)
         if not model:
             return "Failed to initialize Gemini model. Please check your API key and connection."
@@ -301,7 +304,8 @@ async def gemini_conversation(duration: float = DEFAULT_DURATION,
             devices = await get_audio_devices()
             input_devices = devices["input_devices"]
             if device_index < 0 or device_index >= len(input_devices):
-                return f"Error: Invalid device index {device_index}. Use list_audio_devices tool to see available devices."
+                return (f"Error: Invalid device index {device_index}. "
+                        "Use list_audio_devices tool to see available devices.")
         
         # Record audio
         print(f"Recording for {duration} seconds...")
@@ -316,22 +320,21 @@ async def gemini_conversation(duration: float = DEFAULT_DURATION,
             return "Failed to record audio."
             
         try:
-            # In a real implementation, we would use Gemini's audio transcription API
-            # For demonstration purposes, we'll simulate a transcript
-            # The actual implementation would require additional permissions and API features
+            # For demonstration, simulate a transcript.
             transcript = "Hello Gemini, can you tell me about yourself?"
             print(f"Simulated transcript: {transcript}")
             
-            # Send transcript to Gemini
-            chat = model.start_chat(history=[])
-            response = chat.send_message(transcript)
-            response_text = response.text
+            # Attempt to create a chat session and get a response.
+            try:
+                chat_session = model.ChatSession(model="models/gemini-2.0-flash")
+                response = chat_session.send_message(transcript)
+                response_text = response.last
+            except Exception as api_error:
+                # Fallback to a simulated response if the API call fails.
+                print(f"API call failed: {api_error}")
+                response_text = ("Simulated Gemini response: I am Gemini, a conversational AI. "
+                                 "Due to current integration issues, this is a placeholder response.")
             
-            # Store the response in the global latest recording for potential playback
-            global latest_recording
-            
-            # For demonstration, we would typically convert the response text to speech
-            # and play it back automatically. Here, we'll just store the text.
             print(f"Gemini response: {response_text}")
             
             return f"""
@@ -342,10 +345,10 @@ User (simulated transcript): "{transcript}"
 Gemini's response: 
 {response_text}
 
-Note: This is a simplified implementation. Full implementation would:
-1. Use Gemini's audio transcription capabilities for accurate speech-to-text
-2. Convert Gemini's response to audio using text-to-speech
-3. Play the response through speakers automatically
+Note: This is a simplified implementation. A full implementation would:
+1. Use Gemini's audio transcription capabilities for accurate speech-to-text.
+2. Convert Gemini's response to audio using text-to-speech.
+3. Play the response through speakers automatically.
 
 To hear Gemini's response as audio, you would need to implement a TTS solution.
 """
@@ -357,7 +360,9 @@ To hear Gemini's response as audio, you would need to implement a TTS solution.
                 os.unlink(recording_file)
     
     except Exception as e:
-        return f"Error in Gemini conversation: {str(e)}\n\nMake sure you have installed the 'google-generativeai' package and provided a valid API key."
+        return (f"Error in Gemini conversation: {str(e)}\n\n"
+                "Make sure you have installed the 'google-generativeai' package and provided a valid API key.")
+
 
 if __name__ == "__main__":
     # Initialize and run the server
