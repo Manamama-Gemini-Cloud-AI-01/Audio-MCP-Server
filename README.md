@@ -1,4 +1,5 @@
 # Audio MCP Server
+[![smithery badge](https://smithery.ai/badge/@GongRzhe/Audio-MCP-Server)](https://smithery.ai/server/@GongRzhe/Audio-MCP-Server)
 
 An MCP (Model Context Protocol) server that provides audio input/output capabilities for AI assistants like Claude. This server enables Claude to interact with your computer's audio system, including recording from microphones and playing audio through speakers.
 
@@ -19,6 +20,15 @@ An MCP (Model Context Protocol) server that provides audio input/output capabili
 
 ## Installation
 
+### Installing via Smithery
+
+To install Audio Interface Server for Claude Desktop automatically via [Smithery](https://smithery.ai/server/@GongRzhe/Audio-MCP-Server):
+
+```bash
+npx -y @smithery/cli install @GongRzhe/Audio-MCP-Server --client claude
+```
+
+### Manual Installation
 1. Clone this repository or download the files to your computer:
 
 ```bash
