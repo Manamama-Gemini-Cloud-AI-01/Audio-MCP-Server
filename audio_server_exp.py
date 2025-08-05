@@ -1,14 +1,14 @@
 #!/usr/bin/env python3
 import asyncio
-import base64
 import io
 import json
 import os
 import sounddevice as sd
 import soundfile as sf
 import numpy as np
-import tempfile
 import wave
+from datetime import datetime
+from pathlib import Path
 from mcp.server.fastmcp import FastMCP
 from dotenv import load_dotenv
 
@@ -91,72 +91,24 @@ async def record_audio(duration: float = DEFAULT_DURATION,
         # Wait for the recording to complete
         sd.wait()
         
-        # Generate a temp file for storage
-        fd, temp_path = tempfile.mkstemp(suffix='.wav')
-        try:
-            with wave.open(temp_path, 'wb') as wf:
-                wf.setnchannels(channels)
-                wf.setsampwidth(2)  # 16-bit
-                wf.setframerate(sample_rate)
-                wf.writeframes((recording * 32767).astype(np.int16).tobytes())
-            
-            # Encode the file for storage
-            with open(temp_path, 'rb') as f:
-                encoded_audio = base64.b64encode(f.read()).decode('utf-8')
-                
-            # Store the audio in a global variable for later playback
-            global latest_recording
-            latest_recording = {
-                'audio_data': encoded_audio,
-                'sample_rate': sample_rate,
-                'channels': channels
-            }
-            
-            return f"Successfully recorded {duration} seconds of audio. Use play_latest_recording tool to play it back."
-        finally:
-            os.close(fd)
-            os.unlink(temp_path)
+        # Create 'audio' subfolder if it doesn't exist
+        audio_dir = Path("audio")
+        audio_dir.mkdir(exist_ok=True)
+        
+        # Generate a sensible filename with timestamp and duration
+        timestamp = datetime.now().strftime("%Y-%m-%d_%H-%M-%S")
+        filename = f"audio_{timestamp}_{duration}s.ogg"
+        file_path = audio_dir / filename
+        
+        # Save the audio to the file
+        sf.write(file_path, recording, sample_rate)
+        
+        return f"Audio recorded and saved to: {file_path.resolve()}"
             
     except Exception as e:
         return f"Error recording audio: {str(e)}"
 
-# Global variable to store the latest recording
-latest_recording = None
 
-@mcp.tool()
-async def play_latest_recording() -> str:
-    """Play the latest recorded audio through the speakers."""
-    global latest_recording
-    
-    if latest_recording is None:
-        return "No recording available. Use record_audio tool first."
-    
-    try:
-        # Decode the audio data
-        audio_data = base64.b64decode(latest_recording['audio_data'])
-        sample_rate = latest_recording['sample_rate']
-        channels = latest_recording['channels']
-        
-        # Create a temporary file
-        fd, temp_path = tempfile.mkstemp(suffix='.wav')
-        try:
-            # Write the audio data to the temp file
-            with open(temp_path, 'wb') as f:
-                f.write(audio_data)
-            
-            # Read the audio file
-            data, fs = sf.read(temp_path)
-            
-            # Play the audio
-            sd.play(data, fs)
-            sd.wait()  # Wait until the audio is done playing
-            
-            return "Successfully played the latest recording."
-        finally:
-            os.close(fd)
-            os.unlink(temp_path)
-    except Exception as e:
-        return f"Error playing audio: {str(e)}"
 
 @mcp.tool()
 async def play_audio(text: str, voice: str = "default") -> str:
@@ -183,7 +135,6 @@ async def play_audio(text: str, voice: str = "default") -> str:
         )
     except Exception as e:
         return f"Error playing audio: {str(e)}"
-
 @mcp.tool()
 async def play_audio_file(file_path: str, device_index: int = None) -> str:
     """
@@ -218,7 +169,6 @@ async def play_audio_file(file_path: str, device_index: int = None) -> str:
         return f"Successfully played audio file: {file_path}"
     except Exception as e:
         return f"Error playing audio file: {str(e)}"
-
 # Function to initialize Google Generative AI client
 def initialize_genai(api_key):
     """Initialize the Google GenAI client with the provided API key."""
@@ -232,39 +182,6 @@ def initialize_genai(api_key):
     except Exception as e:
         print(f"Error initializing Gemini: {e}")
         return None
-
-async def record_audio_to_file(duration, sample_rate=DEFAULT_SAMPLE_RATE, channels=DEFAULT_CHANNELS, device_index=None):
-    """Record audio and save to a temporary file."""
-    try:
-        # Record audio
-        recording = sd.rec(
-            int(duration * sample_rate),
-            samplerate=sample_rate,
-            channels=channels,
-            device=device_index
-        )
-        
-        # Wait for the recording to complete
-        sd.wait()
-        
-        # Generate a temp file
-        fd, temp_path = tempfile.mkstemp(suffix='.wav')
-        try:
-            with wave.open(temp_path, 'wb') as wf:
-                wf.setnchannels(channels)
-                wf.setsampwidth(2)  # 16-bit
-                wf.setframerate(sample_rate)
-                wf.writeframes((recording * 32767).astype(np.int16).tobytes())
-            
-            return temp_path, fd
-        except Exception as e:
-            os.close(fd)
-            os.unlink(temp_path)
-            print(f"Error saving recording: {e}")
-            return None, None
-    except Exception as e:
-        print(f"Error recording audio: {e}")
-        return None, None
 
 @mcp.tool()
 async def gemini_conversation(duration: float = DEFAULT_DURATION,
@@ -304,22 +221,23 @@ async def gemini_conversation(duration: float = DEFAULT_DURATION,
             devices = await get_audio_devices()
             input_devices = devices["input_devices"]
             if device_index < 0 or device_index >= len(input_devices):
-                return (f"Error: Invalid device index {device_index}. "
-                        "Use list_audio_devices tool to see available devices.")
+                return (
+                    f"Error: Invalid device index {device_index}. "
+                    "Use list_audio_devices tool to see available devices.")
         
         # Record audio
         print(f"Recording for {duration} seconds...")
-        recording_file, fd = await record_audio_to_file(
+        recorded_file_path = await record_audio(
             duration, 
             sample_rate=sample_rate, 
             channels=channels, 
             device_index=device_index
         )
         
-        if not recording_file:
-            return "Failed to record audio."
+        if "Error" in recorded_file_path:
+            return f"Failed to record audio: {recorded_file_path}"
             
-        try:
+try:
             # For demonstration, simulate a transcript.
             transcript = "Hello Gemini, can you tell me about yourself?"
             print(f"Simulated transcript: {transcript}")
@@ -345,19 +263,16 @@ User (simulated transcript): "{transcript}"
 Gemini's response: 
 {response_text}
 
+Audio saved to: {recorded_file_path}
+
 Note: This is a simplified implementation. A full implementation would:
 1. Use Gemini's audio transcription capabilities for accurate speech-to-text.
 2. Convert Gemini's response to audio using text-to-speech.
 3. Play the response through speakers automatically.
-
-To hear Gemini's response as audio, you would need to implement a TTS solution.
 """
         finally:
-            # Clean up the temporary recording file
-            if fd:
-                os.close(fd)
-            if recording_file and os.path.exists(recording_file):
-                os.unlink(recording_file)
+            # Clean up the temporary recording file (if any, though record_audio now saves directly)
+            pass # No temporary file to clean up here
     
     except Exception as e:
         return (f"Error in Gemini conversation: {str(e)}\n\n"
