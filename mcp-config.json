@@ -1,12 +1,13 @@
 {
   "mcpServers": {
     "audio-interface": {
-      "command": "C:\\Users\\Administrator\\Desktop\\audio-mcp-server\\.venv\\Scripts\\python.exe",
+      "command": "/data/data/com.termux/files/home/downloads/GitHub/Audio-MCP-Server/.venv/bin/python",
       "args": [
-        "C:\\Users\\Administrator\\Desktop\\audio-mcp-server\\audio_server.py"
+        "/data/data/com.termux/files/home/downloads/GitHub/Audio-MCP-Server/audio_server.py"
       ],
       "env": {
-        "PYTHONPATH": "C:\\Users\\Administrator\\Desktop\\audio-mcp-server"
+        "PYTHONPATH": "/data/data/com.termux/files/home/downloads/GitHub/Audio-MCP-Server",
+        "GOOGLE_API_KEY": "XXX"
       }
     }
   }
